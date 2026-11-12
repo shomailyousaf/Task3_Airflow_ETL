@@ -11,9 +11,6 @@ from airflow.models import Variable
 from airflow.operators.python import PythonOperator
 
 
-# --------------------------------------------------
-# CONFIGURATION
-# --------------------------------------------------
 
 API_URL = "https://api.frankfurter.dev/v2/rates"
 
@@ -29,9 +26,6 @@ default_args = {
 }
 
 
-# --------------------------------------------------
-# TASK 1: EXTRACT CURRENCY EXCHANGE RATES
-# --------------------------------------------------
 
 def extract_exchange_rates(**context):
 
@@ -65,7 +59,7 @@ def extract_exchange_rates(**context):
             "date": item["date"]
         })
 
-    # Push data using a named XCom key
+    
     context["ti"].xcom_push(
         key="raw_exchange_rates",
         value=raw_rates
@@ -74,15 +68,13 @@ def extract_exchange_rates(**context):
     logging.info("Extracted %s exchange rates", len(raw_rates))
 
 
-# --------------------------------------------------
-# TASK 2: TRANSFORM EXCHANGE RATE DATA
-# --------------------------------------------------
+
 
 def transform_exchange_rates(**context):
 
     logging.info("Starting exchange rate transformation")
 
-    # Retrieve extracted data using its named XCom key
+    
     raw_rates = context["ti"].xcom_pull(
         task_ids="extract_rates",
         key="raw_exchange_rates"
@@ -110,7 +102,7 @@ def transform_exchange_rates(**context):
 
         transformed_rates.append(transformed_record)
 
-    # Push transformed data using another named XCom key
+   
     context["ti"].xcom_push(
         key="transformed_exchange_rates",
         value=transformed_rates
@@ -122,15 +114,13 @@ def transform_exchange_rates(**context):
     )
 
 
-# --------------------------------------------------
-# TASK 3: LOAD DATA INTO MONGODB
-# --------------------------------------------------
+
 
 def load_exchange_rates(**context):
 
     logging.info("Starting MongoDB data loading")
 
-    # Retrieve transformed data using its named XCom key
+   
     transformed_rates = context["ti"].xcom_pull(
         task_ids="transform_rates",
         key="transformed_exchange_rates"
@@ -139,7 +129,7 @@ def load_exchange_rates(**context):
     if not transformed_rates:
         raise ValueError("No transformed data found in XCom")
 
-    # Retrieve MongoDB connection string from Airflow Variable
+   
     mongo_uri = Variable.get("MONGO_URI")
 
     client = MongoClient(
@@ -148,13 +138,13 @@ def load_exchange_rates(**context):
     )
 
     try:
-        # Verify MongoDB connection
+       
         client.admin.command("ping")
 
         database = client[MONGO_DATABASE]
         collection = database[MONGO_COLLECTION]
 
-        # Avoid duplicate documents when rerunning the DAG
+       
         collection.create_index(
             [
                 ("base_currency", 1),
@@ -189,9 +179,6 @@ def load_exchange_rates(**context):
         client.close()
 
 
-# --------------------------------------------------
-# DAG DEFINITION
-# --------------------------------------------------
 
 with DAG(
     dag_id="currency_exchange_etl",
@@ -219,5 +206,5 @@ with DAG(
         python_callable=load_exchange_rates
     )
 
-    # Define the execution sequence
+    
     extract_task >> transform_task >> load_task
